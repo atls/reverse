@@ -1,0 +1,13 @@
+@startuml
+class MAIN_TradingCore {
+    +adress 008cdc3f
+    +is_compiled false
+}
+
+note right of MAIN_TradingCore
+    Главный цикл стратегии. 
+    Обрабатывает сигналы, рассчитывает риск и запускает исполнение сделки.
+    Не декомпилируется.
+end note
+
+@enduml
