@@ -1,0 +1,176 @@
+@startuml
+
+package "no refs" {
+class calc_positionSize {
+    +adress 0074faee
+}
+
+note right of calc_positionSize
+Рассчитывает объем позиции на основе риска/правил.
+end note
+
+class internal_calculateRisk {
+    +adress 0074f444
+}
+
+note right of internal_calculateRisk
+Внутренний расчет риска (вызывается из calc_positionSize).
+end note
+
+class execute_buyLogic {
+    +adress 00750f02
+}
+
+note right of execute_buyLogic
+Флаг uStack_40=1 может означать направление сделки
+end note
+
+class execute_sellLogic {
+    +adress 00750f4e
+}
+
+note right of execute_sellLogic
+Флаг uStack_40=0 - противоположное действие
+end note
+
+class order_prepareData {
+    +adress 00748dfd
+}
+
+note right of order_prepareData
+Подготавливает параметры ордера перед расчетами
+end note
+
+class business_sendTradeEntry {
+    +adress 005afb0f
+}
+
+note right of business_sendTradeEntry
+это момент "отправки сделки" или передачи параметров трейда в модуль, 
+который уже будет исполнять действия 
+(открытие, логирование, стратегия выхода и т.п.).
+end note
+
+class api_orderSendWrapper {
+    +adress 005b424f
+}
+
+note right of api_orderSendWrapper
+Функция отправки ордера (OrderSend wrapper)
+end note
+
+class api_sendOrder {
+    +adress 01710048
+}
+
+note right of api_sendOrder
+Указатель на функцию отправки ордера (аналог OrderSend в MQL).
+end note
+
+class api_getMarketData {
+    +adress 0171004c
+}
+
+note right of api_getMarketData
+Получает рыночные данные (цены, объемы).
+end note
+
+class ptr_bigAskPrice {
+    +adress 0174ee14
+}
+
+note right of ptr_bigAskPrice
+Указатель на текущие котировки (Bid/Ask).
+end note
+
+}
+
+
+class main_tradingCore {
+    +adress 008cdc3f
+    +is_compiled false
+}
+
+note right of main_tradingCore
+    Главный цикл стратегии. 
+    Обрабатывает сигналы, рассчитывает риск и запускает исполнение сделки.
+    Не декомпилируется.
+end note
+
+class main_evaluateSignal {
+    +adress 005f7aaf
+}
+
+note right of main_evaluateSignal
+Ядро оценки сигнала. 
+ядро оценки сигнала перед постановкой заявки. Её задача — принять входные параметры (контекст и данные сигнала) и решить:
+нужно ли продолжать (или сразу выйти);
+    если да, то:
+        провалидировать ордер через orderparams_validateAndProcess (008f080f);
+        вызвать коллбек, если он есть в vtable + 0x88 через DISPATCH_00a10b4f;
+        иначе вызвать func_0x005fa9d9() → аварийный выход через swi(3).
+end note
+
+class orderparams_validateAndProcess {
+    +adress 008f080f
+}
+
+note right of orderparams_validateAndProcess
+Обрабатывает указатель на параметры ордера (через param_2), 
+валидирует через внешнюю функцию, 
+извлекает полезную нагрузку, 
+вызывает func_0x0060593d, 
+если пройдены все условия.
+end note
+
+class orderparams_applyFeatureLogic {
+    +adress 0060593d
+}
+
+note right of orderparams_applyFeatureLogic
+Проверяет входные параметры, 
+собирает структуру ордера и передаёт её в фичу с кодом 0x40c. 
+Падение происходит при некорректных ID или недопустимых значениях параметров.
+end note
+
+class orderparams_buildOrderParamsStruct {
+    +adress 0060519b
+}
+
+note right of orderparams_buildOrderParamsStruct
+Заполняет структуру параметров сделки: 
+size, fallback-флаг, источник и тело параметров.
+end note
+
+class dispatch_processOrFinalizeCallback {
+    +adress 00a10b4f
+}
+
+note right of dispatch_processOrFinalizeCallback
+Проверка валидности и завершение или запуск действия. 
+Вызывает _DAT_01710b84 и _DAT_01710c78/*_vtable + 0x88 
+в зависимости от состояния. 
+Используется как безопасный dispatcher-функционал.
+end note
+
+main_tradingCore <-- main_evaluateSignal
+
+main_evaluateSignal <-- orderparams_validateAndProcess
+main_evaluateSignal <-- dispatch_processOrFinalizeCallback
+
+orderparams_validateAndProcess <-- "func_0x005b124f(param_2)"
+orderparams_validateAndProcess <-- "_DAT_01710b84 → проверка валидности"
+orderparams_validateAndProcess <-- "func_0x005b118f → достаёт структуру из входа"
+orderparams_validateAndProcess <-- "func_0x008effef → условие"
+orderparams_validateAndProcess <-- "SUB_0060593d → APPLY Feature Logic"
+orderparams_validateAndProcess <-- "SUB_0060519b → orderparams_buildOrderParamsStruct"
+orderparams_validateAndProcess <-- "CONST_DISABLED_FeatureFlag"
+orderparams_validateAndProcess <-- orderparams_applyFeatureLogic
+
+orderparams_applyFeatureLogic <-- orderparams_buildOrderParamsStruct
+
+dispatch_processOrFinalizeCallback <-- "_DAT_01710b84 → проверка"
+dispatch_processOrFinalizeCallback <-- "_DAT_01710c78 → fallback логика"
+dispatch_processOrFinalizeCallback <-- "vtable + 0x88 → кастомная обработка"
+
+@enduml
